@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0b12">
+<title>rizzmate</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{--bg:#0b0b12;--card:#15151f;--line:#24242f;--txt:#eceaf2;--dim:#8b8b9c;--acc:#b4ff3d;--pink:#ff4d8d}
+body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 -apple-system,system-ui,Roboto,sans-serif;padding:14px 14px calc(20px + env(safe-area-inset-bottom));max-width:620px;margin:0 auto}
+.hide{display:none!important}
+h1{font-size:34px;margin:0 0 4px;letter-spacing:-1px}
+h1 b,.brand b{color:var(--acc)}
+.brand{font-weight:800;font-size:19px}
+.muted{color:var(--dim)}.small{font-size:12px}
+input{width:100%;padding:11px 12px;border-radius:11px;border:1px solid var(--line);background:#101018;color:var(--txt);font-size:15px;margin-bottom:8px}
+input:focus{outline:none;border-color:var(--acc)}
+button{width:100%;border:0;border-radius:11px;padding:12px;font-size:15px;font-weight:600;background:var(--line);color:var(--txt);margin-bottom:8px}
+button.p{background:var(--acc);color:#0b0b12}
+button.g{background:transparent;border:1px solid var(--line);color:var(--dim)}
+header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px}
+.pill{font-size:11px;padding:4px 9px;border-radius:99px;border:1px solid var(--line);color:var(--dim)}
+.pill.ok{color:var(--acc);border-color:var(--acc)}
+nav{display:flex;gap:6px;margin-bottom:12px}
+nav button{background:transparent;color:var(--dim);font-size:13px;padding:8px 10px;margin:0}
+nav button.on{background:var(--card);color:var(--acc)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px;margin-bottom:12px}
+.item{display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px;margin-bottom:8px}
+.av{width:38px;height:38px;border-radius:50%;background:#23232f;color:var(--acc);display:grid;place-items:center;font-weight:700;flex:0 0 auto}
+.grow{flex:1;min-width:0}
+.nm{font-weight:600;font-size:14px}
+.sub{color:var(--dim);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini{width:auto;padding:7px 11px;font-size:12px;margin:0;border-radius:9px}
+.mini.on{background:var(--acc);color:#0b0b12}
+label{font-size:12px;color:var(--dim);display:block;margin-bottom:3px}
+.sw{display:flex;align-items:center;gap:9px;font-size:14px;margin:10px 0}
+.sw input{width:20px;height:20px;margin:0;accent-color:var(--acc)}
+.sw.big{font-size:16px;font-weight:700}
+#qr{width:100%;max-width:290px;display:block;margin:10px auto;background:#fff;padding:8px;border-radius:10px}
+.code{font-family:ui-monospace,monospace;font-size:22px;letter-spacing:4px;color:var(--acc);text-align:center}
+.msg{font-size:13px;padding:8px 11px;border-radius:11px;max-width:88%;margin-bottom:6px}
+.msg.her{background:var(--card);border:1px solid var(--line)}
+.msg.me{background:#1e3a12;border:1px solid #2e5a1c;margin-left:auto}
+.msg time{display:block;font-size:10px;color:var(--dim);margin-top:3px}
+.logline{font-size:12px;color:var(--dim);border-left:2px solid var(--line);padding-left:9px;margin-bottom:6px}
+.logline.out{color:var(--acc);border-color:var(--acc)}
+.logline.error{color:var(--pink);border-color:var(--pink)}
+.row{display:flex;gap:8px}.row button{flex:1}
+#login{display:flex;flex-direction:column;justify-content:center;min-height:85vh;gap:8px}
+</style>
+</head>
+<body>
+
+<div id="login">
+  <h1>rizz<b>mate</b></h1>
+  <p class="muted small">password</p>
+  <input id="pw" type="password" placeholder="••••••">
+  <button class="p" id="go">enter</button>
+  <p class="muted small" id="err"></p>
+</div>
+
+<div id="app" class="hide">
+  <header><div class="brand">rizz<b>mate</b></div><div class="pill" id="conn">…</div></header>
+  <nav>
+    <button class="on" data-t="chats">chats</button>
+    <button data-t="link">connect</button>
+    <button data-t="set">settings</button>
+    <button data-t="log">log</button>
+  </nav>
+
+  <div id="p-chats">
+    <div class="card hide" id="qrbox">
+      <b>link whatsapp</b>
+      <p class="muted small">linked devices → link a device. or use the code below.</p>
+      <img id="qr" alt="qr">
+      <div class="row"><input id="phone" placeholder="phone w/ country code"><button id="pair">code</button></div>
+      <p class="code" id="code"></p>
+    </div>
+    <input id="search" placeholder="search">
+    <div id="list"></div>
+  </div>
+
+  <div id="p-link" class="hide">
+    <div class="card">
+      <b>connection</b>
+      <p class="muted small">unofficial link. keep your phone online for the first sync.</p>
+      <button class="p" id="conn2">start / rescan</button>
+      <button class="g" id="unlink">unlink whatsapp</button>
+      <p class="muted small" id="lmsg"></p>
+    </div>
+  </div>
+
+  <div id="p-set" class="hide">
+    <div class="card">
+      <label>your name</label><input id="s-name">
+      <label>model</label><input id="s-model">
+      <label>messiness <span id="s-mv"></span></label>
+      <input id="s-mess" type="range" min="0" max="100" step="5">
+      <p class="muted small">higher = drier, more typos, more silence, more double texts</p>
+      <label>max reply length</label><input id="s-max" type="number">
+      <label>min delay ms</label><input id="s-dmin" type="number">
+      <label>max delay ms</label><input id="s-dmax" type="number">
+      <label class="sw"><input type="checkbox" id="s-master"> master switch</label>
+      <label class="sw"><input type="checkbox" id="s-groups"> reply in groups</label>
+      <button class="p" id="s-save">save</button>
+      <p class="muted small" id="s-msg"></p>
+    </div>
+  </div>
+
+  <div id="p-log" class="hide"><div id="logs"></div></div>
+</div>
+
+<div id="detail" class="hide">
+  <header><button class="mini g" id="back" style="width:auto">←</button><div class="brand" id="d-name"></div></header>
+  <div class="card">
+    <label class="sw big"><input type="checkbox" id="d-rizz"> rizz mode</label>
+    <p class="muted small">on = it reads her and answers on its own</p>
+    <label>goal</label><input id="d-goal">
+    <label>tone</label><input id="d-tone">
+    <div class="row"><button class="p" id="d-now">reply now</button><button class="g" id="d-open">opener</button></div>
+    <p class="muted small" id="d-msg"></p>
+  </div>
+  <div id="d-hist"></div>
+</div>
+
+<script>
+const $ = (i) => document.getElementById(i)
+let cur = null, contacts = [], timer = null
+
+async function api(p, o = {}) {
+  const r = await fetch(p, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', ...o })
+  if (r.status === 401) { $('app').classList.add('hide'); $('detail').classList.add('hide'); $('login').classList.remove('hide'); throw new Error('auth') }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status)
+  return r.json().catch(() => ({}))
+}
+const esc = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+const ago = (t) => { if (!t) return ''; const s = (Date.now() - t) / 1000; return s < 60 ? 'now' : s < 3600 ? Math.floor(s / 60) + 'm' : s < 86400 ? Math.floor(s / 3600) + 'h' : Math.floor(s / 86400) + 'd' }
+
+$('go').onclick = async () => {
+  $('err').textContent = ''
+  try { await api('/api/login', { method: 'POST', body: JSON.stringify({ password: $('pw').value }) }); $('login').classList.add('hide'); $('app').classList.remove('hide'); tick() }
+  catch (e) { $('err').textContent = e.message }
+}
+$('pw').onkeydown = (e) => { if (e.key === 'Enter') $('go').click() }
+
+document.querySelectorAll('nav button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach((x) => x.classList.remove('on'))
+  b.classList.add('on')
+  for (const id of ['chats', 'link', 'set', 'log']) $('p-' + id).classList.add('hide')
+  $('p-' + b.dataset.t).classList.remove('hide')
+})
+
+function drawList() {
+  const q = $('search').value.toLowerCase()
+  $('list').innerHTML = ''
+  const rows = contacts.filter((c) => (c.name || '').toLowerCase().includes(q))
+  if (!rows.length) return $('list').innerHTML = '<p class="muted small">nothing yet. link whatsapp and let it sync.</p>'
+  for (const c of rows) {
+    const d = document.createElement('div')
+    d.className = 'item'
+    d.innerHTML = `<div class="av">${esc((c.name || '?')[0].toUpperCase())}</div>
+      <div class="grow"><div class="nm">${esc(c.name)}</div><div class="sub">${esc(c.lastMsg || 'no messages')}</div></div>
+      <button class="mini ${c.rizz ? 'on' : ''}">${c.rizz ? 'on' : 'rizz'}</button>`
+    d.querySelector('.grow').onclick = () => open(c.jid)
+    d.querySelector('button').onclick = async (e) => {
+      e.stopPropagation()
+      await api(`/api/contact/${encodeURIComponent(c.jid)}/rizz`, { method: 'POST', body: JSON.stringify({ on: !c.rizz }) })
+      tick()
+    }
+    $('list').appendChild(d)
+  }
+}
+
+function drawLogs(logs) {
+  $('logs').innerHTML = ''
+  for (const l of logs) {
+    const d = document.createElement('div')
+    d.className = 'logline ' + l.kind
+    d.textContent = `${ago(l.ts)} · ${l.text}`
+    $('logs').appendChild(d)
+  }
+}
+
+async function tick() {
+  clearTimeout(timer)
+  timer = setTimeout(tick, 3000)
+  try {
+    const s = await api('/api/state')
+    contacts = s.contacts
+    $('conn').textContent = s.status.connected ? 'linked' : s.status.status
+    $('conn').className = 'pill' + (s.status.connected ? ' ok' : '')
+    $('qrbox').classList.toggle('hide', !s.status.qr)
+    if (s.status.qr) $('qr').src = s.status.qr
+    $('code').textContent = s.status.pairCode || ''
+    $('s-name').value = s.settings.myName
+    $('s-model').value = s.settings.model
+    $('s-mess').value = s.settings.messiness
+    $('s-mv').textContent = s.settings.messiness
+    $('s-max').value = s.settings.maxReplyChars
+    $('s-dmin').value = s.settings.delayMin
+    $('s-dmax').value = s.settings.delayMax
+    $('s-master').checked = s.settings.masterOn
+    $('s-groups').checked = s.settings.replyToGroups
+    drawList()
+    drawLogs(s.logs)
+    if (cur) load(cur, true)
+  } catch {}
+}
+
+async function open(jid) {
+  cur = jid
+  $('app').classList.add('hide')
+  $('detail').classList.remove('hide')
+  await load(jid)
+}
+
+async function load(jid, quiet) {
+  try {
+    const { contact, history } = await api('/api/contact/' + encodeURIComponent(jid))
+    $('d-name').textContent = contact.name
+    $('d-rizz').checked = contact.rizz
+    if (!quiet) { $('d-goal').value = contact.goal; $('d-tone').value = contact.tone }
+    const h = $('d-hist')
+    h.innerHTML = ''
+    for (const m of history) {
+      const d = document.createElement('div')
+      d.className = 'msg ' + (m.role === 'me' ? 'me' : 'her')
+      d.innerHTML = `${esc(m.text)}<time>${ago(m.ts)}</time>`
+      h.appendChild(d)
+    }
+  } catch {}
+}
+
+$('back').onclick = () => { cur = null; $('detail').classList.add('hide'); $('app').classList.remove('hide'); tick() }
+$('search').oninput = drawList
+$('d-rizz').onchange = () => api(`/api/contact/${encodeURIComponent(cur)}/rizz`, { method: 'POST', body: JSON.stringify({ on: $('d-rizz').checked }) })
+$('d-goal').onchange = $('d-tone').onchange = () => api(`/api/contact/${encodeURIComponent(cur)}/update`, { method: 'POST', body: JSON.stringify({ goal: $('d-goal').value, tone: $('d-tone').value }) })
+$('d-now').onclick = async () => { $('d-msg').textContent = 'thinking…'; try { await api(`/api/contact/${encodeURIComponent(cur)}/now`, { method: 'POST', body: '{}' }); $('d-msg').textContent = 'done'; load(cur) } catch (e) { $('d-msg').textContent = e.message } }
+$('d-open').onclick = async () => { $('d-msg').textContent = 'writing…'; try { await api(`/api/contact/${encodeURIComponent(cur)}/now`, { method: 'POST', body: JSON.stringify({ mode: 'opener' }) }); $('d-msg').textContent = 'sent'; load(cur) } catch (e) { $('d-msg').textContent = e.message } }
+
+$('s-save').onclick = async () => {
+  await api('/api/settings', { method: 'POST', body: JSON.stringify({
+    myName: $('s-name').value, model: $('s-model').value, messiness: Number($('s-mess').value),
+    maxReplyChars: Number($('s-max').value), delayMin: Number($('s-dmin').value), delayMax: Number($('s-dmax').value),
+    masterOn: $('s-master').checked, replyToGroups: $('s-groups').checked
+  }) })
+  $('s-msg').textContent = 'saved'
+}
+$('s-mess').oninput = () => { $('s-mv').textContent = $('s-mess').value }
+
+$('conn2').onclick = async () => { $('lmsg').textContent = 'starting…'; try { await api('/api/wa/connect', { method: 'POST' }); $('lmsg').textContent = 'check the chats tab' } catch (e) { $('lmsg').textContent = e.message } }
+$('pair').onclick = async () => { try { await api('/api/wa/pair', { method: 'POST', body: JSON.stringify({ phone: $('phone').value }) }); $('lmsg').textContent = 'code sent, see chats tab' } catch (e) { $('lmsg').textContent = e.message } }
+$('unlink').onclick = async () => { await api('/api/wa/logout', { method: 'POST' }); tick() }
+
+api('/api/state').then(() => { $('login').classList.add('hide'); $('app').classList.remove('hide'); tick() }).catch(() => {})
+</script>
+</body>
+</html>
