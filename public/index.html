@@ -37,8 +37,11 @@ label{font-size:12px;color:var(--dim);display:block;margin-bottom:3px}
 .sw{display:flex;align-items:center;gap:9px;font-size:14px;margin:10px 0}
 .sw input{width:20px;height:20px;margin:0;accent-color:var(--acc)}
 .sw.big{font-size:16px;font-weight:700}
-#qr{width:100%;max-width:290px;display:block;margin:10px auto;background:#fff;padding:8px;border-radius:10px}
-.code{font-family:ui-monospace,monospace;font-size:22px;letter-spacing:4px;color:var(--acc);text-align:center}
+#qr{width:100%;max-width:250px;display:block;margin:10px auto;background:#fff;padding:8px;border-radius:10px}
+.code{font-family:ui-monospace,monospace;font-size:30px;letter-spacing:5px;color:var(--acc);text-align:center;margin:12px 0 4px}
+.steps{font-size:13px;color:var(--dim);padding-left:18px;margin:8px 0}
+.steps li{margin-bottom:5px}
+.err{color:var(--pink);font-size:13px}
 .msg{font-size:13px;padding:8px 11px;border-radius:11px;max-width:88%;margin-bottom:6px}
 .msg.her{background:var(--card);border:1px solid var(--line)}
 .msg.me{background:#1e3a12;border:1px solid #2e5a1c;margin-left:auto}
@@ -57,7 +60,7 @@ label{font-size:12px;color:var(--dim);display:block;margin-bottom:3px}
   <p class="muted small">password</p>
   <input id="pw" type="password" placeholder="••••••">
   <button class="p" id="go">enter</button>
-  <p class="muted small" id="err"></p>
+  <p class="err" id="lerr"></p>
 </div>
 
 <div id="app" class="hide">
@@ -70,13 +73,31 @@ label{font-size:12px;color:var(--dim);display:block;margin-bottom:3px}
   </nav>
 
   <div id="p-chats">
-    <div class="card hide" id="qrbox">
-      <b>link whatsapp</b>
-      <p class="muted small">linked devices → link a device. or use the code below.</p>
-      <img id="qr" alt="qr">
-      <div class="row"><input id="phone" placeholder="phone w/ country code"><button id="pair">code</button></div>
-      <p class="code" id="code"></p>
+    <div class="card hide" id="pairbox">
+      <b>link your number</b>
+      <p class="muted small">full international format, country code first, no + and no leading 0</p>
+      <div class="row"><input id="phone" placeholder="447123456789"><button id="pair">get code</button></div>
+      <p class="err" id="perr"></p>
+
+      <div id="codewrap" class="hide">
+        <p class="muted small">entering code for <b id="pnum"></b></p>
+        <p class="code" id="code"></p>
+        <p class="muted small" id="ptimer"></p>
+        <ol class="steps">
+          <li>Open WhatsApp on the phone with that number</li>
+          <li>Settings → Linked devices → <b>Link with phone number</b></li>
+          <li>Confirm the number, then type the code above</li>
+        </ol>
+        <button class="g" id="recode">new code</button>
+        <button class="g" id="cancelpair">cancel</button>
+      </div>
+
+      <div id="qrwrap" class="hide">
+        <p class="muted small">or scan:</p>
+        <img id="qr" alt="qr">
+      </div>
     </div>
+
     <input id="search" placeholder="search">
     <div id="list"></div>
   </div>
@@ -126,7 +147,7 @@ label{font-size:12px;color:var(--dim);display:block;margin-bottom:3px}
 
 <script>
 const $ = (i) => document.getElementById(i)
-let cur = null, contacts = [], timer = null
+let cur = null, contacts = [], timer = null, ticker = null
 
 async function api(p, o = {}) {
   const r = await fetch(p, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', ...o })
@@ -138,9 +159,9 @@ const esc = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const ago = (t) => { if (!t) return ''; const s = (Date.now() - t) / 1000; return s < 60 ? 'now' : s < 3600 ? Math.floor(s / 60) + 'm' : s < 86400 ? Math.floor(s / 3600) + 'h' : Math.floor(s / 86400) + 'd' }
 
 $('go').onclick = async () => {
-  $('err').textContent = ''
+  $('lerr').textContent = ''
   try { await api('/api/login', { method: 'POST', body: JSON.stringify({ password: $('pw').value }) }); $('login').classList.add('hide'); $('app').classList.remove('hide'); tick() }
-  catch (e) { $('err').textContent = e.message }
+  catch (e) { $('lerr').textContent = e.message }
 }
 $('pw').onkeydown = (e) => { if (e.key === 'Enter') $('go').click() }
 
@@ -182,6 +203,18 @@ function drawLogs(logs) {
   }
 }
 
+function startTimer(expiresAt) {
+  clearInterval(ticker)
+  if (!expiresAt) return
+  const paint = () => {
+    const left = Math.max(0, Math.round((expiresAt - Date.now()) / 1000))
+    $('ptimer').textContent = left ? `expires in ${left}s` : 'expired, get a new code'
+    $('ptimer').className = left ? 'muted small' : 'err'
+  }
+  paint()
+  ticker = setInterval(paint, 1000)
+}
+
 async function tick() {
   clearTimeout(timer)
   timer = setTimeout(tick, 3000)
@@ -190,9 +223,15 @@ async function tick() {
     contacts = s.contacts
     $('conn').textContent = s.status.connected ? 'linked' : s.status.status
     $('conn').className = 'pill' + (s.status.connected ? ' ok' : '')
-    $('qrbox').classList.toggle('hide', !s.status.qr)
+
+    const p = s.status.pairing || {}
+    $('pairbox').classList.toggle('hide', s.status.connected || (s.status.status === 'idle' && !p.active))
+    $('codewrap').classList.toggle('hide', !p.active)
+    $('qrwrap').classList.toggle('hide', !s.status.qr)
     if (s.status.qr) $('qr').src = s.status.qr
-    $('code').textContent = s.status.pairCode || ''
+    if (p.code) { $('code').textContent = p.code; $('pnum').textContent = '+' + p.phone; startTimer(p.expiresAt) }
+    if (p.error) $('perr').textContent = p.error
+
     $('s-name').value = s.settings.myName
     $('s-model').value = s.settings.model
     $('s-mess').value = s.settings.messiness
@@ -249,8 +288,19 @@ $('s-save').onclick = async () => {
 }
 $('s-mess').oninput = () => { $('s-mv').textContent = $('s-mess').value }
 
+$('pair').onclick = async () => {
+  $('perr').textContent = ''
+  try {
+    const r = await api('/api/wa/pair', { method: 'POST', body: JSON.stringify({ phone: $('phone').value }) })
+    $('code').textContent = r.code
+    $('pnum').textContent = '+' + r.phone
+    startTimer(r.expiresAt)
+    $('codewrap').classList.remove('hide')
+  } catch (e) { $('perr').textContent = e.message }
+}
+$('recode').onclick = () => $('pair').click()
+$('cancelpair').onclick = async () => { await api('/api/wa/pair/cancel', { method: 'POST' }); $('codewrap').classList.add('hide'); clearInterval(ticker); tick() }
 $('conn2').onclick = async () => { $('lmsg').textContent = 'starting…'; try { await api('/api/wa/connect', { method: 'POST' }); $('lmsg').textContent = 'check the chats tab' } catch (e) { $('lmsg').textContent = e.message } }
-$('pair').onclick = async () => { try { await api('/api/wa/pair', { method: 'POST', body: JSON.stringify({ phone: $('phone').value }) }); $('lmsg').textContent = 'code sent, see chats tab' } catch (e) { $('lmsg').textContent = e.message } }
 $('unlink').onclick = async () => { await api('/api/wa/logout', { method: 'POST' }); tick() }
 
 api('/api/state').then(() => { $('login').classList.add('hide'); $('app').classList.remove('hide'); tick() }).catch(() => {})

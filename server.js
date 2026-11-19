@@ -1,4 +1,4 @@
-// RizzMate - single file backend. Env: APP_PASSWORD, SESSION_SECRET, VENICE_API_KEY
+// RizzMate. Env: APP_PASSWORD, SESSION_SECRET, VENICE_API_KEY
 import 'dotenv/config'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -153,24 +153,13 @@ const DRY = /^(lol|lmao|haha|hehe|ok|okay|k|yeah|yea|yep|fr|true|👍|😂|😭|
 
 function rollMood(herText) {
   const m = state.settings.messiness / 100
-  const dry = DRY.test(herText.trim())
-  if (dry && Math.random() < 0.2 * m) return { skip: true }
-
+  if (DRY.test(herText.trim()) && Math.random() < 0.2 * m) return { skip: true }
   const mood = { skip: false, hint: 'normal reply, keep it short', max: state.settings.maxReplyChars, double: Math.random() < 0.12 * m }
   const r = Math.random()
-
-  if (r < 0.2 * m) {
-    mood.hint = 'dry and low effort. 2-5 words. no question, no emoji'
-    mood.max = 45
-  } else if (r < 0.36 * m) {
-    mood.hint = 'one short blunt line. no emoji'
-    mood.max = 55
-  } else if (r < 0.48 * m) {
-    mood.hint = 'short and a bit chaotic, change the subject'
-    mood.max = 70
-  } else if (r < 0.62) {
-    mood.hint = 'ask her something short'
-  }
+  if (r < 0.2 * m) { mood.hint = 'dry and low effort. 2-5 words. no question, no emoji'; mood.max = 45 }
+  else if (r < 0.36 * m) { mood.hint = 'one short blunt line. no emoji'; mood.max = 55 }
+  else if (r < 0.48 * m) { mood.hint = 'short and a bit chaotic, change the subject'; mood.max = 70 }
+  else if (r < 0.62) { mood.hint = 'ask her something short' }
   if (Math.random() < 0.55) mood.hint += '. no emoji this time'
   return mood
 }
@@ -188,9 +177,7 @@ async function generate(c, jid, hint) {
 
 async function generateOpener(c, jid) {
   const h = histOf(jid)
-  const hint = h.length
-    ? 'send the next text now, short and specific'
-    : 'first text ever. specific and low effort. not hey, not wyd'
+  const hint = h.length ? 'send the next text now, short and specific' : 'first text ever. specific and low effort. not hey, not wyd'
   const msgs = [{ role: 'system', content: systemPrompt(c, state.settings, hint, false) }]
   for (const x of h) msgs.push({ role: x.role === 'me' ? 'assistant' : 'user', content: x.text })
   if (!h.length) msgs.push({ role: 'user', content: 'write the first message' })
@@ -202,12 +189,23 @@ const logger = pino({ level: 'warn' })
 let sock = null
 let status = 'idle'
 let qrUrl = null
-let pairCode = null
-let pairPhone = null
-let pairTried = false
 let reconnect = null
 let bootAt = Date.now()
 const inboundAt = new Map()
+const timers = new Map()
+const recent = new Map()
+
+let pairing = { active: false, phone: null, code: null, at: 0, expiresAt: 0, attempts: 0, error: null }
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+function normalizePhone(raw) {
+  let d = String(raw || '').replace(/[^\d+]/g, '').replace(/^\+/, '')
+  if (d.startsWith('00')) d = d.slice(2)
+  const leadingZero = d.startsWith('0')
+  if (leadingZero) d = d.slice(1)
+  return { digits: d, leadingZero }
+}
 
 async function authState() {
   let d = { creds: initAuthCreds(), keys: {} }
@@ -276,62 +274,111 @@ async function onMessage(m) {
 
   if (!state.settings.masterOn || !c.rizz) return
   clearTimeout(timers.get(jid))
-  timers.set(jid, setTimeout(() => {
-    timers.delete(jid)
-    run(jid).catch((e) => log('error', e.message, jid))
-  }, 2500))
+  timers.set(jid, setTimeout(() => { timers.delete(jid); run(jid).catch((e) => log('error', e.message, jid)) }, 2500))
 }
 
 async function start(fresh = false) {
+  clearTimeout(reconnect)
   if (fresh) { try { fs.rmSync(SESSION, { force: true }) } catch {} }
   if (sock) { try { sock.ev.removeAllListeners(); sock.end(undefined) } catch {} }
   sock = null
-  status = 'connecting'; qrUrl = null; pairCode = null; pairTried = false; bootAt = Date.now()
+  status = 'connecting'
+  qrUrl = null
+  bootAt = Date.now()
 
   const { state: auth, saveCreds } = await authState()
   const { version } = await fetchLatestBaileysVersion()
 
-  sock = makeWASocket({
+  const s = makeWASocket({
     version, auth, logger, printQRInTerminal: false, syncFullHistory: true,
     markOnline: false, getMessage: async () => undefined,
-    browser: ['RizzMate', 'Chrome', '2.0.0']
+    browser: ['RizzMate', 'Chrome', '2.1.0']
   })
+  sock = s
 
-  sock.ev.on('creds.update', saveCreds)
-  sock.ev.on('connection.update', async (u) => {
-    if (u.qr) {
+  s.ev.on('creds.update', saveCreds)
+  s.ev.on('connection.update', async (u) => {
+    if (u.qr && sock === s) {
       status = 'qr'
       try { qrUrl = await QRCode.toDataURL(u.qr, { margin: 1, width: 300 }) } catch {}
-      if (pairPhone && !pairTried) {
-        pairTried = true
-        try { pairCode = await sock.requestPairingCode(pairPhone); log('system', 'pairing code issued') }
-        catch (e) { log('error', `pairing failed: ${e.message}`) }
-      }
     }
-    if (u.connection === 'open') {
-      status = 'open'; qrUrl = null; pairCode = null; pairPhone = null
-      log('system', `linked as ${sock.user?.name || sock.user?.id}`)
+    if (u.connection === 'open' && sock === s) {
+      status = 'open'
+      qrUrl = null
+      pairing = { active: false, phone: null, code: null, at: 0, expiresAt: 0, attempts: 0, error: null }
+      log('system', `linked as ${s.user?.name || s.user?.id}`)
     }
     if (u.connection === 'close') {
-      if (u.lastDisconnect?.error?.output?.statusCode === DisconnectReason.loggedOut) {
-        status = 'loggedout'; log('error', 'unlinked, scan again')
+      if (sock !== s) return
+      const code = u.lastDisconnect?.error?.output?.statusCode
+      if (code === DisconnectReason.loggedOut) {
+        status = 'loggedout'
+        log('error', 'unlinked, link again')
         try { fs.rmSync(SESSION, { force: true }) } catch {}
+        return
+      }
+      if (pairing.active && pairing.attempts < 3) {
+        status = 'pairing'
+        reconnect = setTimeout(() => {
+          issueCode(pairing.phone).catch((e) => log('error', e.message))
+        }, 2500)
       } else {
         status = 'reconnecting'
-        clearTimeout(reconnect)
         reconnect = setTimeout(() => start().catch(() => {}), 3000)
       }
     }
   })
-  sock.ev.on('messaging-history.set', ({ contacts, chats }) => { ingest(contacts); ingest(chats) })
-  sock.ev.on('contacts.upsert', ingest)
-  sock.ev.on('contacts.update', ingest)
-  sock.ev.on('chats.upsert', ingest)
-  sock.ev.on('messages.upsert', ({ messages, type }) => {
+  s.ev.on('messaging-history.set', ({ contacts, chats }) => { ingest(contacts); ingest(chats) })
+  s.ev.on('contacts.upsert', ingest)
+  s.ev.on('contacts.update', ingest)
+  s.ev.on('chats.upsert', ingest)
+  s.ev.on('messages.upsert', ({ messages, type }) => {
     if (type !== 'notify') return
     for (const m of messages) onMessage(m).catch((e) => log('error', e.message))
   })
-  return sock
+  return s
+}
+
+async function waitForSocket(ms = 20000) {
+  const t0 = Date.now()
+  while (Date.now() - t0 < ms) {
+    if (sock && status === 'qr') return sock
+    if (status === 'open') return sock
+    await sleep(250)
+  }
+  return null
+}
+
+async function issueCode(rawPhone) {
+  const { digits, leadingZero } = normalizePhone(rawPhone)
+  if (digits.length < 10 || digits.length > 15) {
+    throw new Error('number looks wrong, use full international format with country code (no leading 0, no +)')
+  }
+  if (leadingZero) log('system', 'leading 0 stripped, using country code format')
+
+  pairing = {
+    active: true, phone: digits, code: null, at: Date.now(), expiresAt: 0,
+    attempts: (pairing.attempts || 0) + 1, error: null
+  }
+
+  const s = await start(true)
+  const ready = await waitForSocket()
+  if (!ready) throw new Error('could not reach whatsapp, hit get code again')
+
+  let code
+  try {
+    code = await s.requestPairingCode(digits)
+  } catch (e) {
+    throw new Error(`whatsapp refused the code: ${e.message}`)
+  }
+  if (!code) throw new Error('whatsapp returned no code, hit get code again')
+
+  const fmt = code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code
+  pairing.code = fmt
+  pairing.at = Date.now()
+  pairing.expiresAt = Date.now() + 60000
+  log('system', `pairing code for +${digits}`)
+  return { code: fmt, phone: digits, expiresAt: pairing.expiresAt, attempts: pairing.attempts }
 }
 
 async function send(jid, text) {
@@ -342,9 +389,6 @@ async function send(jid, text) {
 const typing = (jid, on) => sock?.sendPresenceUpdate(on ? 'composing' : 'paused', jid).catch(() => {})
 
 /* ---------------- rizz engine ---------------- */
-const timers = new Map()
-const recent = new Map()
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const FOLLOW_UPS = ['?', 'you there', 'hellooo', '👀', 'well', 'ok then', 'so']
 
 function bubble(text) {
@@ -429,7 +473,10 @@ app.post('/api/login', (req, res) => {
 app.post('/api/logout', (_, res) => { res.clearCookie('rizz'); res.json({ ok: true }) })
 
 app.get('/api/state', guard(async (_, res) => res.json({
-  status: { status, connected: status === 'open', qr: qrUrl, pairCode, me: sock?.user?.name || null },
+  status: {
+    status, connected: status === 'open', qr: qrUrl, me: sock?.user?.name || null,
+    pairing: { active: pairing.active, code: pairing.code, phone: pairing.phone, expiresAt: pairing.expiresAt, error: pairing.error }
+  },
   settings: state.settings,
   contacts: Object.values(state.contacts)
     .sort((a, b) => (b.lastMsgAt || 0) - (a.lastMsgAt || 0))
@@ -483,14 +530,28 @@ app.post('/api/settings', guard(async (req, res) => {
   res.json({ ok: true })
 }))
 
-app.post('/api/wa/connect', guard(async (_, res) => { await start(); res.json({ ok: true }) }))
 app.post('/api/wa/pair', guard(async (req, res) => {
-  pairPhone = String(req.body?.phone || '').replace(/\D/g, '')
-  pairTried = false
-  if (sock && status === 'qr') { try { pairCode = await sock.requestPairingCode(pairPhone); pairTried = true } catch {} }
+  try {
+    const out = await issueCode(req.body?.phone || '')
+    res.json(out)
+  } catch (e) {
+    pairing.error = e.message
+    log('error', `pairing: ${e.message}`)
+    res.status(400).json({ error: e.message })
+  }
+}))
+
+app.post('/api/wa/pair/cancel', guard(async (_, res) => {
+  pairing = { active: false, phone: null, code: null, at: 0, expiresAt: 0, attempts: 0, error: null }
   res.json({ ok: true })
 }))
-app.post('/api/wa/logout', guard(async (_, res) => { try { await sock?.logout() } catch {}; try { fs.rmSync(SESSION, { force: true }) } catch {}; status = 'loggedout'; res.json({ ok: true }) }))
+
+app.post('/api/wa/logout', guard(async (_, res) => {
+  try { await sock?.logout() } catch {}
+  try { fs.rmSync(SESSION, { force: true }) } catch {}
+  status = 'loggedout'
+  res.json({ ok: true })
+}))
 
 app.use(express.static(path.join(import.meta.dirname, 'public')))
 app.get('*', (_, res) => res.sendFile(path.join(import.meta.dirname, 'public', 'index.html')))
